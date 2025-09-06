@@ -18,3 +18,10 @@ jobs:
                 pip install -r requirements.txt
             
             - run: flet build apk .
+
+            - name: APK Upload
+              uses: actions/upload_artifact@v4
+              with:
+                  name: your-apk
+                  path: build/apk/*.apk
+                  retention-days: 1
