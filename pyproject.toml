@@ -12,7 +12,6 @@ dependencies = [
   "yt-dlp==2025.3.31",
   "flet-permission-handler==0.1.0",
   "flet-audio==0.1.0",
-  "flet-webview==0.1.0"
 ]
 
 [tool.flet]
@@ -25,10 +24,14 @@ assets = ["src/assets"]
 app_icon = "src/assets/icon.png"
 app_splash = "src/assets/splash_android.png"
 
+[tool.flet.flutter.pubspec.dependency_overrides]
+webview_flutter_android = "4.10.1"
+
 # ANDROID PERMISSIONS
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true
 "android.permission.STORAGE" = true
 
-[tool.felt.android]
+[tool.flet.android]
 fullscreen = true
+min_sdk_version = 24
