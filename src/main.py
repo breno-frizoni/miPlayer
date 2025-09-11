@@ -1,7 +1,10 @@
 import flet as ft
 import flet_permission_handler as fph
+import flet_audio as faudio
 from yt_dlp import YoutubeDL
 import os
+from time import sleep
+import shutil
 
 class HomeView(ft.View):
     def __init__(self, page):
@@ -27,6 +30,8 @@ class DownloadView(ft.View):
         self.display = ft.Text('')
         self.url_getter = ft.TextField(autofocus=True, width=400)
         self.storage_path = storage_path
+        with open(os.path.join(storage_path, 'downloads_path.txt'), 'r') as f:
+            self.download_path = f.read()
         self.player = player
         print('0 - super init')
         super().__init__(
@@ -49,20 +54,21 @@ class DownloadView(ft.View):
         print('1 - super init e Init DownloadView')
 
     def hook_output(self, d: dict):
-        hook_state = None
         print('0 - hook_output')
         print(f'status: {d["status"]}')
-        if d['status'] == 'downloading' and not hook_state:
-            self.hook_state = True
-            self.display.value = f"Baixando: {d['info_dict']['title']}"
-            if self.page: # This condition avoid NoneType exception when user is on other view
-                self.page.update()
         if d['status'] == 'finished':
             self.display.value += f'\nDownload realizado com sucesso!'
+            if os.path.exists(self.download_path):
+                shutil.copy(src=d['filename'], dst=self.download_path)
+                print('Arquivo copiado para pasta escolhida pelo usuário')
             if self.page:
                 self.page.update()
             else:
                 self.player.refresh_songs()
+        else:
+            self.display.value = f"Baixando: {d['info_dict']['title']}"
+            if self.page: # This condition avoid NoneType exception when user is on other view
+                self.page.update()
             
         print('1 - hook_output')
 
@@ -82,8 +88,7 @@ class DownloadView(ft.View):
                 'noprogress': False,
                 'overwrites': True,
                 'progress_hooks': [self.hook_output],
-                'paths': {'home': self.storage_path},
-                'outtmpl': os.path.join(self.storage_path, '%(title)s.%(ext)s')
+                'outtmpl': os.path.join(self.storage_path, 'songs', '%(title)s.%(ext)s')
             }
             print('yt_dlp_conf criada')
             try:
@@ -104,8 +109,9 @@ class DownloadView(ft.View):
 class PlayerView(ft.View):
     def __init__(self, page, storage_path):
         self.page = page
-        self.storage_path = storage_path
+        self.songs_path = os.path.join(storage_path, 'songs')
         self.song_list = ft.ListView(expand=True)
+        self.song_index = list()
         super().__init__(
             route='/player',
             appbar=ft.AppBar(
@@ -117,42 +123,129 @@ class PlayerView(ft.View):
             ),
             controls = [self.song_list]
         )
+    
+    def play(self, i):
+        audio = faudio.Audio(
+            src=os.path.join(self.songs_path, self.song_index[i]),
+            autoplay=True,
+            volume=1,
+            balance=0
+        )
+        if self.page.overlay and isinstance(self.page.overlay[0], faudio.Audio):
+            if self.page.overlay[0].src == audio.src:
+                return None
+            else:
+                self.refresh_songs()
+        print(f'Iniciada rotina do som {self.song_index[i]}')
+        self.song_list.controls[i].leading = ft.Icon(ft.Icons.PAUSE_CIRCLE)
+        self.song_list.controls[i].selected = True
+        self.page.overlay.clear()
+        self.page.overlay.append(audio)
+        self.page.update()
+        
+
     def refresh_songs(self):
-        ''' Update list based on directory files '''
+        ''' Update list based on app/storage/data/songs directory files '''
         self.song_list.controls.clear()
-        for f in os.listdir(self.storage_path):
+        self.song_index = []
+        i = 0
+        for f in os.listdir(self.songs_path):
             self.song_list.controls.append(
                 ft.ListTile(
-                    leading=ft.Icon(ft.Icons.PLAY_CIRCLE),
                     title=ft.Text(f),
-                    selected_tile_color="#320344",
-                    hover_color="#243D63"
+                    leading=ft.Icon(ft.Icons.PLAY_CIRCLE),
+                    selected_tile_color="#243D63",
+                    enable_feedback=True,
+                    hover_color="#243D63",
+                    on_click=lambda e, idx=i: self.play(idx),
+                    shape=ft.RoundedRectangleBorder(ft.border_radius.all(30)),
+                    content_padding= ft.Padding(10,10,10,10),
+                    text_color= "#8092AF",
+                    selected_color="#6FBEFF"
                 )
             )
+            self.song_index.append(f)
+            i += 1
         if self.page:  self.page.update()
         
 
 def main(page: ft.Page):
+
     # CONFIGURA O TEMA
     page.theme_mode = ft.ThemeMode.DARK
     page.title='miPlayer'
 
-    # PATH
-    client_storage_data = os.getenv('FLET_APP_STORAGE_DATA')
+    # APP STORAGE PATH
+    internal_app_storage = os.getenv('FLET_APP_STORAGE_DATA')
 
-    # CHECK-UP DE PERMISSÕES
-    ph = fph.PermissionHandler()
-    page.overlay.append(ph)
-    try:
-        if ph.check_permission(of=fph.PermissionType.MANAGE_EXTERNAL_STORAGE) == "DENIED":
-            ph.request_permission(of=fph.PermissionType.MANAGE_EXTERNAL_STORAGE)
-    except:
-        print('Permission request timeout')
-
-    # CARREGA VIEWS NA MEMÓRIA
-    home = HomeView(page)
-    player = PlayerView(page, client_storage_data)
-    downloader = DownloadView(page, client_storage_data, player)
+    # DEFINE FUNÇÕES E CARREGA VIEWS NA MEMÓRIA
+    home = None
+    downloader = None
+    player = None
+    def send_msg(title: str, content: str):
+        showing = True
+        def on_dismiss(e):
+            nonlocal showing
+            showing = False
+        
+        dlg = ft.AlertDialog(
+            title=ft.Row([ft.Text(title)], alignment=ft.MainAxisAlignment.CENTER), 
+            content=ft.Text(content),
+            on_dismiss=on_dismiss,
+        )
+        page.open(dlg)
+        # sync provision
+        while showing:
+            sleep(0.5)
+    def path_getter(e):
+        nonlocal internal_app_storage
+        with open(os.path.join(internal_app_storage, 'downloads_path.txt'), 'w') as f:
+            if e.path:
+                f.write(e.path)
+            else:
+                f.write('None')
+    def file_picker():
+        waiting = True
+        print('file_picker inicializado')
+        nonlocal internal_app_storage
+        f = os.path.join(internal_app_storage, 'downloads_path.txt')
+        print(f)
+        file_picker = ft.FilePicker(
+            on_result=path_getter
+        )
+        page.overlay.append(file_picker)
+        page.update()
+        file_picker.get_directory_path()
+        while waiting:
+            sleep(1)
+            print(waiting)
+            if os.path.exists(f):
+                waiting = False
+    def init():
+        nonlocal home, downloader, player
+        page.overlay.clear()
+        ph = fph.PermissionHandler()
+        page.overlay.append(ph)
+        page.update()
+        sleep(1)
+        pstat = ph.request_permission(fph.PermissionType.STORAGE, 10)
+        print(f'PermissionStatus: {pstat}') 
+        if pstat == fph.PermissionStatus.GRANTED:
+            if not os.path.exists(os.path.join(internal_app_storage, 'downloads_path.txt')):
+                send_msg(
+                    title='Pasta de Downloads',
+                    content='Caso não escolha um diretório válido suas músicas' \
+                    ' serão salvas no armazenamento interno do aplicativo. Esta ' \
+                    'configuração pode ser alterada posteriormente.'
+                )
+                file_picker()
+            home = HomeView(page)
+            player = PlayerView(page, internal_app_storage)
+            downloader = DownloadView(page, internal_app_storage, player)
+            page.go('/')
+            return pstat
+        else:
+            return None
 
     # SISTEMA DE NAVEGAÇÃO
     def route_change(e):
@@ -171,6 +264,34 @@ def main(page: ft.Page):
         print('update view_pop')
     page.on_route_change = route_change
     page.on_view_pop = view_pop
-    page.go('/')
+
+    # INICIALIZAÇÃO  
+    if not init():      
+        page.add(
+                ft.Row(
+                    [
+                        ft.Column(
+                            [
+                                ft.Container(
+                                    ft.Text('Para o correto funcionamento do aplicativo, ' \
+                                    'precisamos sua permissão para armazenar as músicas em ' \
+                                    'seu dispositivo.'),
+                                    width=300,
+                                    height=100,
+                                    adaptive=True
+                                ),
+                                ft.ElevatedButton(
+                                    'Conceder Permissão',
+                                    on_click=lambda _: init(),
+                                )
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER
+                        )
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    expand=True
+                )
+        )
+        page.update()
 
 ft.app(target=main)

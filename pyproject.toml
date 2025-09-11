@@ -10,22 +10,24 @@ authors = [
 dependencies = [
   "flet==0.28.3",
   "yt-dlp==2025.3.31",
-  "flet-permission-handler==0.1.0"
+  "flet-permission-handler==0.1.0",
+  "flet-audio==0.1.0"
 ]
 
 [tool.flet]
-
 org = "com.mycompany"
 product = "miPlayer"
 company = "Flet"
 copyright = "Copyright (C) 2025 by Flet"
 app.path = "src"
-permissions = [
-  "manageExternalStorage"
-]
+assets = ["src/assets"]
+app_icon = "src/assets/icon.png"
+app_splash = "src/assets/splash_android.png"
 
-# ANDROID PERMISSIONS TO CHECK
-#[tool.flet.android.permission]
-#"android.permission.INTERNET" = true
-#"android.permission.WRITE_EXTERNAL_STORAGE" = true
-#"android.permission.READ_EXTERNAL_STORAGE" = true
+# ANDROID PERMISSIONS
+[tool.flet.android.permission]
+"android.permission.INTERNET" = true
+"android.permission.STORAGE" = true
+
+[tool.felt.android]
+fullscreen = true
