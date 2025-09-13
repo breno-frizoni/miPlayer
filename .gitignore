@@ -1,4 +1,4 @@
 src/learning_snippets/
 src/tester/
 storage/data/songs
-storage/data/downloads_path.txt
+storage/data/config.json

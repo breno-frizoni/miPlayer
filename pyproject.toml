@@ -27,11 +27,9 @@ app_splash = "src/assets/splash_android.png"
 [tool.flet.flutter.pubspec.dependency_overrides]
 webview_flutter_android = "4.10.1"
 
-# ANDROID PERMISSIONS
-[tool.flet.android.permission]
-"android.permission.INTERNET" = true
-"android.permission.STORAGE" = true
-
 [tool.flet.android]
 fullscreen = true
 min_sdk_version = 24
+
+[tool.flet.android.permission] # --android-permissions
+"android.permission.STORAGE" = true
