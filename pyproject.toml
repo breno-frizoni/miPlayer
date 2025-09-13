@@ -33,3 +33,4 @@ min_sdk_version = 24
 
 [tool.flet.android.permission] # --android-permissions
 "android.permission.STORAGE" = true
+"android.permission.MICROPHONE"
